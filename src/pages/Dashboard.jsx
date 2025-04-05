@@ -1,144 +1,276 @@
 import React, { useState, useEffect } from 'react';
+import { 
+  Box, 
+  Typography, 
+  Avatar, 
+  Button, 
+  List, 
+  ListItem, 
+  ListItemText, 
+  ListItemAvatar,
+  Paper,
+  Container,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  CircularProgress
+} from '@mui/material';
+import { Add as AddIcon, Person as PersonIcon } from '@mui/icons-material';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
-  const [repositories, setRepositories] = useState([]);
+  const [user, setUser] = useState(null);
+  const [repos, setRepos] = useState([]);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [newRepoName, setNewRepoName] = useState('');
+  const [newRepoDescription, setNewRepoDescription] = useState('');
+  const [isPublic, setIsPublic] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchRepositories();
+    // Fetch user data and repositories
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const userResponse = await axios.get('http://localhost:8000/api/v1/users/me',
+          {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+            }
+          }
+        );
+        setUser(userResponse.data.data);
+        const reposResponse = await axios.get('http://localhost:8000/api/v1/repos/repo/get',
+          {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+            }
+          }
+        );
+        console.log('API Response:', reposResponse.data);
+        const reposData = reposResponse.data.data || [];
+        setRepos(reposData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setError('Failed to load data. Please try again later.');
+        setRepos([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
   }, []);
 
-  const fetchRepositories = async () => {
+  const handleCreateRepo = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/v1/repositories', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+      const response = await axios.post(
+        'http://localhost:8000/api/v1/repos/repo',
+        {
+          name: newRepoName,
+          description: newRepoDescription,
+          isPublic: isPublic
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+            'Content-Type': 'application/json'
+          }
         }
-      });
-      setRepositories(response.data.data);
-      setLoading(false);
-    } catch (err) {
-      console.log(err);
-      setError('Failed to fetch repositories');
-      setLoading(false);
+      );
+      
+      if (response.data.statusCode === 200) {
+        setOpenDialog(false);
+        setNewRepoName('');
+        setNewRepoDescription('');
+        setIsPublic(true);
+        // Refresh repositories list
+        const reposResponse = await axios.get('http://localhost:8000/api/v1/repos/repo/get', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+          }
+        });
+        const reposData = reposResponse.data.data || [];
+        setRepos(reposData);
+      }
+    } catch (error) {
+      console.error('Error creating repository:', error);
+      setError(error.response?.data?.message || 'Failed to create repository. Please try again.');
     }
   };
 
-  const handleCreateRepo = () => {
-    navigate('/create-repository');
+  // Function to get the avatar URL
+  const getAvatarUrl = () => {
+    if (!user?.avatar) return null;
+    // If avatar is a full URL, return it directly
+    if (user.avatar.startsWith('http')) return user.avatar;
+    // If avatar is a path, prepend the API base URL
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    return `${apiUrl}${user.avatar}`;
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900">Your Repositories</h1>
-            <button
-              onClick={handleCreateRepo}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors duration-200"
+    <Container maxWidth="lg">
+      <Box sx={{ mt: 4, mb: 4 }}>
+        {/* User Profile Section */}
+        <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Avatar 
+              src={getAvatarUrl()}
+              alt={user?.username || 'User'} 
+              sx={{ width: 100, height: 100 }}
+            >
+              {!getAvatarUrl() && <PersonIcon sx={{ fontSize: 50 }} />}
+            </Avatar>
+            <Box>
+              <Typography variant="h4" component="h1">
+                {user?.username || 'Loading...'}
+              </Typography>
+              <Typography variant="subtitle1" color="text.secondary">
+                {user?.email || ''}
+              </Typography>
+            </Box>
+          </Box>
+        </Paper>
+
+        {/* Repositories Section */}
+        <Paper elevation={3} sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h5" component="h2">
+              Your Repositories
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setOpenDialog(true)}
             >
               New Repository
-            </button>
-          </div>
-        </div>
-      </div>
+            </Button>
+          </Box>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative mb-4">
-            {error}
-          </div>
-        )}
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+              <CircularProgress />
+            </Box>
+          ) : error ? (
+            <Typography color="error" sx={{ p: 2 }}>
+              {error}
+            </Typography>
+          ) : repos.length === 0 ? (
+            <Typography sx={{ p: 2, color: 'text.secondary' }}>
+              No repositories found. Create your first repository!
+            </Typography>
+          ) : (
+            <List>
+              {repos.map((repo) => (
+                <ListItem 
+                  key={repo._id}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                      cursor: 'pointer'
+                    }
+                  }}
+                >
+                  <ListItemAvatar>
+                    <Avatar>
+                      {repo.name.charAt(0).toUpperCase()}
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={repo.name}
+                    secondary={
+                      <>
+                        <Typography component="span" variant="body2" color="text.primary">
+                          {repo.description || 'No description'}
+                        </Typography>
+                        <br />
+                        <Typography component="span" variant="body2" color="text.secondary">
+                          {repo.isPublic ? 'Public' : 'Private'} • Last updated: {new Date(repo.updatedAt).toLocaleDateString()}
+                        </Typography>
+                      </>
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </Paper>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {repositories.map((repo) => (
-            <div
-              key={repo.id}
-              className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  <a href={`/repository/${repo.id}`} className="hover:text-blue-600">
-                    {repo.name}
-                  </a>
-                </h2>
-                <span className="text-sm text-gray-500">
-                  {repo.visibility}
-                </span>
-              </div>
-              
-              <p className="text-gray-600 mb-4">
-                {repo.description || 'No description provided'}
-              </p>
-
-              <div className="flex items-center text-sm text-gray-500">
-                <div className="flex items-center mr-4">
-                  <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z" />
-                    <path d="M5 3a2 2 0 00-2 2v6a2 2 0 002 2V5h8a2 2 0 00-2-2H5z" />
-                  </svg>
-                  {repo.forkCount || 0} forks
-                </div>
-                <div className="flex items-center">
-                  <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                  {repo.starCount || 0} stars
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <img
-                      className="h-8 w-8 rounded-full"
-                      src={repo.ownerAvatar || 'https://via.placeholder.com/40'}
-                      alt="Owner avatar"
-                    />
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-900">
-                      {repo.ownerName}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Last updated {new Date(repo.updatedAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {repositories.length === 0 && !loading && (
-          <div className="text-center py-12">
-            <h3 className="text-lg font-medium text-gray-900">No repositories found</h3>
-            <p className="mt-2 text-gray-500">Get started by creating a new repository.</p>
-            <button
-              onClick={handleCreateRepo}
-              className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors duration-200"
+        {/* Create Repository Dialog */}
+        <Dialog 
+          open={openDialog} 
+          onClose={() => setOpenDialog(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Create New Repository</DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 2 }}>
+              <TextField
+                autoFocus
+                margin="dense"
+                label="Repository Name"
+                fullWidth
+                value={newRepoName}
+                onChange={(e) => setNewRepoName(e.target.value)}
+                required
+              />
+              <TextField
+                margin="dense"
+                label="Description (Optional)"
+                fullWidth
+                multiline
+                rows={3}
+                value={newRepoDescription}
+                onChange={(e) => setNewRepoDescription(e.target.value)}
+              />
+              <Box sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
+                <Typography variant="body1" sx={{ mr: 2 }}>
+                  Visibility:
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="radio"
+                    id="public"
+                    name="visibility"
+                    checked={isPublic}
+                    onChange={() => setIsPublic(true)}
+                  />
+                  <label htmlFor="public" style={{ marginLeft: '8px', marginRight: '16px' }}>
+                    Public
+                  </label>
+                  <input
+                    type="radio"
+                    id="private"
+                    name="visibility"
+                    checked={!isPublic}
+                    onChange={() => setIsPublic(false)}
+                  />
+                  <label htmlFor="private" style={{ marginLeft: '8px' }}>
+                    Private
+                  </label>
+                </Box>
+              </Box>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={handleCreateRepo} 
+              variant="contained"
+              disabled={!newRepoName}
             >
               Create Repository
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </Box>
+    </Container>
   );
 };
 

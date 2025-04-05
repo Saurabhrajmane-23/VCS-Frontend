@@ -37,7 +37,7 @@ const Login = () => {
 
        if (response.data.statusCode === 200) {
          // Store the token in localStorage
-         localStorage.setItem('token', response.data.token);
+         localStorage.setItem('accessToken', response.data.data.accessToken);
          
          // Navigate to the attempted page or dashboard
          const from = location.state?.from?.pathname || '/dashboard';
